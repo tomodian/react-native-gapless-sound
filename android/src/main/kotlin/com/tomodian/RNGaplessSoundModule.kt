@@ -1,5 +1,6 @@
 package com.tomodian
 
+import android.content.Context
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.MediaPlayer.OnCompletionListener
@@ -20,6 +21,8 @@ import android.util.Log
 
 class RNGaplessSoundModule(internal var context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
 
+    internal var stack: MutableList<MediaPlayer?> = arrayListOf()
+    internal var currentIndex: Int = 0
     internal var playerPool: MutableMap<Int, MediaPlayer> = HashMap()
 
     override fun getName(): String {
@@ -27,13 +30,28 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
     }
 
     @ReactMethod
-    fun prepare(fileName: String, key: Int?, options: ReadableMap, callback: Callback) {
+    fun prepare(fileName: String, key: Int, options: ReadableMap, callback: Callback) {
+        for(i in 0..1) {
+            try {
+                val player = setupPlayer(fileName, i, options, callback)
+                stack.add(player)
+            } catch(e: RuntimeException) {
+                Log.e("RNGaplessSoundModule", "Exception", e)
+            }
+        }
+    }
+
+    protected fun setupPlayer(fileName: String, key: Int, options: ReadableMap, callback: Callback): MediaPlayer? {
         val player = createMediaPlayer(fileName)
+
         if (player == null) {
             val e = Arguments.createMap()
             e.putInt("code", -1)
-            e.putString("message", "resource not found")
-            return
+
+            val msg: String = "resource not found"
+            e.putString("message", msg)
+
+            throw RuntimeException(msg)
         }
 
         val module = this
@@ -42,21 +60,23 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
             internal var callbackWasCalled = false
 
             @Synchronized override fun onPrepared(mp: MediaPlayer) {
-                if (callbackWasCalled) return
+                if (callbackWasCalled) {
+                    return
+                }
                 callbackWasCalled = true
 
                 module.playerPool.put(key, mp)
+
                 val props = Arguments.createMap()
                 props.putDouble("duration", mp.duration * .001)
+
                 try {
                     callback.invoke(NULL, props)
                 } catch (runtimeException: RuntimeException) {
                     // The callback was already invoked
                     Log.e("RNGaplessSoundModule", "Exception", runtimeException)
                 }
-
             }
-
         })
 
         player.setOnErrorListener(object : OnErrorListener {
@@ -86,17 +106,24 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
             // prepares the audio for us already. So we catch and ignore this error
         }
 
+        return player
     }
 
     protected fun createMediaPlayer(fileName: String): MediaPlayer? {
+
         val res = this.context.resources.getIdentifier(fileName, "raw", this.context.packageName)
+
         if (res != 0) {
             return MediaPlayer.create(this.context, res)
         }
+
         if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
+
             val mediaPlayer = MediaPlayer()
+
             mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC)
             Log.i("RNGaplessSoundModule", fileName)
+
             try {
                 mediaPlayer.setDataSource(fileName)
             } catch (e: IOException) {
@@ -108,6 +135,7 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
         }
 
         val file = File(fileName)
+
         if (file.exists()) {
             val uri = Uri.fromFile(file)
             // Mediaplayer is already prepared here.
@@ -118,6 +146,7 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
 
     @ReactMethod
     fun play(key: Int?, callback: Callback) {
+
         val player = this.playerPool[key]
         if (player == null) {
             callback.invoke(false)
@@ -227,7 +256,7 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
         val player = this.playerPool[key]
         if (player != null) {
             player.setAudioStreamType(AudioManager.STREAM_MUSIC)
-            val audioManager = this.context.getSystemService(this.context.AUDIO_SERVICE) as AudioManager
+            val audioManager = this.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
             audioManager.isSpeakerphoneOn = speaker!!
         }
