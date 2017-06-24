@@ -5,7 +5,8 @@
 #import <React/RCTBridgeModule.h>
 #endif
 
-@interface RNGaplessSound : NSObject <RCTBridgeModule>
+#import <AVFoundation/AVFoundation.h>
+
+@interface RNGaplessSound : NSObject <RCTBridgeModule, AVAudioPlayerDelegate>
 
 @end
-  

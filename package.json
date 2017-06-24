@@ -1,20 +1,24 @@
-
 {
   "name": "react-native-gapless-sound",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.1.0",
+  "description": "React Native module for playing gapless sound clips on iOS and Android",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomodian/react-native-gapless-sound.git"
+  },
   "keywords": [
-    "react-native"
+    "react-native",
+    "react-component",
+    "sound",
+    "audio"
   ],
-  "author": "",
-  "license": "",
+  "author": "Hayato Tomoda",
+  "license": "MIT",
   "peerDependencies": {
-    "react-native": "^0.41.2",
-    "react-native-windows": "0.41.0-rc.1"
-
+    "react-native": ">=0.8.0"
   }
 }
