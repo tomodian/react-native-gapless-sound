@@ -1,4 +1,4 @@
-package com.tomodian
+package com.tomodian.RNGapless
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.JavaScriptModule

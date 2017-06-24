@@ -1,4 +1,4 @@
-package com.tomodian
+package com.tomodian.RNGapless
 
 import android.content.Context
 import android.media.AudioManager
