@@ -6,24 +6,20 @@ import android.media.MediaPlayer
 import android.media.MediaPlayer.OnCompletionListener
 import android.media.MediaPlayer.OnErrorListener
 import android.net.Uri
-
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.Callback
-import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReactContextBaseJavaModule
-import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.ReadableMap
-
+import android.util.Log
+import com.facebook.react.bridge.*
 import java.io.File
 import java.io.IOException
-import java.util.HashMap
-import android.util.Log
+import java.util.*
 
 class RNGaplessSoundModule(internal var context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
 
-    internal var stack: MutableList<MediaPlayer?> = arrayListOf()
-    internal var currentIndex: Int = 0
-    internal var playerPool: MutableMap<Int, MediaPlayer> = HashMap()
+    internal var mainPool: MutableMap<Int, MediaPlayer> = HashMap()
+    internal var shadowPool: MutableMap<Int, MediaPlayer> = HashMap()
+    internal var currentPool: String = ""
+
+    internal val mainPoolName: String = "main"
+    internal val shadowPoolName: String = "shadow"
 
     override fun getName(): String {
         return "RNGaplessSound"
@@ -31,17 +27,12 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
 
     @ReactMethod
     fun prepare(fileName: String, key: Int, options: ReadableMap, callback: Callback) {
-        for(i in 0..1) {
-            try {
-                val player = setupPlayer(fileName, i, options, callback)
-                stack.add(player)
-            } catch(e: RuntimeException) {
-                Log.e("RNGaplessSoundModule", "Exception", e)
-            }
-        }
+        currentPool = mainPoolName
+        setupPlayer(mainPoolName, fileName, key, options, callback)
+        setupPlayer(shadowPoolName, fileName, key, options, callback)
     }
 
-    protected fun setupPlayer(fileName: String, key: Int, options: ReadableMap, callback: Callback): MediaPlayer? {
+    protected fun setupPlayer(pool: String, fileName: String, key: Int, options: ReadableMap, callback: Callback): MediaPlayer? {
         val player = createMediaPlayer(fileName)
 
         if (player == null) {
@@ -65,7 +56,12 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
                 }
                 callbackWasCalled = true
 
-                module.playerPool.put(key, mp)
+                // Append loaded sound resource to the according pool.
+                if(pool == mainPoolName) {
+                    module.mainPool.put(key, mp)
+                } else {
+                    module.shadowPool.put(key, mp)
+                }
 
                 val props = Arguments.createMap()
                 props.putDouble("duration", mp.duration * .001)
@@ -145,16 +141,19 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
     }
 
     @ReactMethod
-    fun play(key: Int?, callback: Callback) {
+    fun play(key: Int, callback: Callback) {
 
-        val player = this.playerPool[key]
+        val player = this.mainPool[key]
+
         if (player == null) {
             callback.invoke(false)
             return
         }
+
         if (player.isPlaying) {
             return
         }
+
         player.setOnCompletionListener(object : OnCompletionListener {
             internal var callbackWasCalled = false
 
@@ -186,7 +185,7 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
 
     @ReactMethod
     fun pause(key: Int?, callback: Callback) {
-        val player = this.playerPool[key]
+        val player = this.mainPool[key]
         if (player != null && player.isPlaying) {
             player.pause()
         }
@@ -195,7 +194,7 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
 
     @ReactMethod
     fun stop(key: Int?, callback: Callback) {
-        val player = this.playerPool[key]
+        val player = this.mainPool[key]
         if (player != null && player.isPlaying) {
             player.pause()
             player.seekTo(0)
@@ -204,58 +203,103 @@ class RNGaplessSoundModule(internal var context: ReactApplicationContext) : Reac
     }
 
     @ReactMethod
-    fun release(key: Int?) {
-        val player = this.playerPool[key]
-        if (player != null) {
-            player.release()
-            this.playerPool.remove(key)
+    fun release(key: Int) {
+
+        val main = this.mainPool[key]
+        val shadow = this.shadowPool[key]
+
+        if (main != null) {
+            main.release()
+            this.mainPool.remove(key)
+        }
+
+        if (shadow != null) {
+            shadow.release()
+            this.shadowPool.remove(key)
         }
     }
 
     @ReactMethod
-    fun setVolume(key: Int?, left: Float?, right: Float?) {
-        val player = this.playerPool[key]
-        player?.setVolume(left!!, right!!)
+    fun setVolume(key: Int, left: Float?, right: Float?) {
+
+        val main = this.mainPool[key]
+        main?.setVolume(left!!, right!!)
+
+        val shadow = this.shadowPool[key]
+        shadow?.setVolume(left!!, right!!)
     }
 
     @ReactMethod
     fun setLooping(key: Int?, looping: Boolean?) {
-        val player = this.playerPool[key]
-        if (player != null) {
-            player.isLooping = looping!!
+
+        val main = this.mainPool[key]
+        if (main != null) {
+            main.isLooping = looping!!
+        }
+
+        val shadow = this.shadowPool[key]
+        if (shadow != null) {
+            shadow.isLooping = looping!!
         }
     }
 
     @ReactMethod
     fun setSpeed(key: Int?, speed: Float?) {
-        val player = this.playerPool[key]
-        if (player != null) {
-            player.playbackParams = player.playbackParams.setSpeed(speed!!)
+
+        val main = this.mainPool[key]
+        if (main != null) {
+            main.playbackParams = main.playbackParams.setSpeed(speed!!)
+        }
+
+        val shadow = this.shadowPool[key]
+        if (shadow != null) {
+            shadow.playbackParams = shadow.playbackParams.setSpeed(speed!!)
         }
     }
 
     @ReactMethod
     fun setCurrentTime(key: Int?, sec: Float?) {
-        val player = this.playerPool[key]
-        player?.seekTo(Math.round(sec!! * 1000).toInt())
+
+        val main = this.mainPool[key]
+        main?.seekTo(Math.round(sec!! * 1000).toInt())
+
+        val shadow = this.shadowPool[key]
+        shadow?.seekTo(Math.round(sec!! * 1000).toInt())
     }
 
     @ReactMethod
     fun getCurrentTime(key: Int?, callback: Callback) {
-        val player = this.playerPool[key]
-        if (player == null) {
+
+        val main = this.mainPool[key]
+        if (main == null) {
             callback.invoke(-1, false)
             return
         }
-        callback.invoke(player.currentPosition * .001, player.isPlaying)
+        callback.invoke(main.currentPosition * .001, main.isPlaying)
+
+        val shadow = this.shadowPool[key]
+        if (shadow == null) {
+            callback.invoke(-1, false)
+            return
+        }
+        callback.invoke(shadow.currentPosition * .001, shadow.isPlaying)
     }
 
     //turn speaker on
     @ReactMethod
     fun setSpeakerphoneOn(key: Int?, speaker: Boolean?) {
-        val player = this.playerPool[key]
-        if (player != null) {
-            player.setAudioStreamType(AudioManager.STREAM_MUSIC)
+
+        val main = this.mainPool[key]
+        if (main != null) {
+            main.setAudioStreamType(AudioManager.STREAM_MUSIC)
+            val audioManager = this.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            audioManager.isSpeakerphoneOn = speaker!!
+        }
+
+        val shadow = this.shadowPool[key]
+        if (shadow != null) {
+            shadow.setAudioStreamType(AudioManager.STREAM_MUSIC)
             val audioManager = this.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
             audioManager.isSpeakerphoneOn = speaker!!
