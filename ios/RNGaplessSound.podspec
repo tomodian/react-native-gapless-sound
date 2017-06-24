@@ -1,24 +1,23 @@
+require 'json'
+
+package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 
 Pod::Spec.new do |s|
-  s.name         = "RNGaplessSound"
-  s.version      = "1.0.0"
-  s.summary      = "RNGaplessSound"
-  s.description  = <<-DESC
-                  RNGaplessSound
-                   DESC
-  s.homepage     = ""
-  s.license      = "MIT"
-  # s.license      = { :type => "MIT", :file => "FILE_LICENSE" }
-  s.author             = { "author" => "author@domain.cn" }
-  s.platform     = :ios, "7.0"
-  s.source       = { :git => "https://github.com/author/RNGaplessSound.git", :tag => "master" }
-  s.source_files  = "RNGaplessSound/**/*.{h,m}"
-  s.requires_arc = true
+  s.name            = "RNGaplessSound"
+  s.version         = package['version']
+  s.summary         = package['description']
+  s.homepage        = "https://github.com/tomodian/react-native-gapless-sound"
+  s.license         = package['license']
+  s.author          = package['author']
+  s.source          = { :git => package['repository']['url'], :tag => s.version }
+  s.default_subspec = 'Core'
+  s.requires_arc    = true
+  s.platform        = :ios, "7.0"
 
+  s.dependency "React/Core"
 
-  s.dependency "React"
-  #s.dependency "others"
+  s.subspec 'Core' do |ss|
+    ss.source_files     = "RNGaplessSound/**/*.{h,m}"
+  end
 
 end
-
-  
